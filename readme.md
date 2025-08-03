@@ -1,10 +1,10 @@
-**# cargo-check-i18n**
+# **cargo-check-i18n**
 
-A Cargo plugin that intercepts `cargo check` output, translates diagnostic messages into your target language using OpenAI, and displays them inline.
+A Cargo plugin that intercepts `cargo check` output, translates diagnostic messages into your target language using LLM, and displays them inline.
 
 ---
 
-**## Features**
+##** Features**
 
 - **Real‑time translation** of `cargo check` output.
 - Configurable target language (e.g. `zh-CN`, `ja-JP`).
@@ -13,7 +13,7 @@ A Cargo plugin that intercepts `cargo check` output, translates diagnostic messa
 
 ---
 
-**## Installation**
+##** Installation**
 
 1. Clone the repository:
 
@@ -47,7 +47,7 @@ A Cargo plugin that intercepts `cargo check` output, translates diagnostic messa
 
 ---
 
-**## Usage**
+##** Usage**
 
 ### 🔧 Local Development and Testing (for contributors)
 
