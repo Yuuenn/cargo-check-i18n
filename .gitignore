@@ -1,0 +1,4 @@
+/target/
+**/*.rs.bk
+/test-error/
+cargo-check-i18n-cache.json
