@@ -4,7 +4,7 @@ A Cargo plugin that intercepts `cargo check` output, translates diagnostic messa
 
 ---
 
-##** Features**
+## Features
 
 - **Real‑time translation** of `cargo check` output.
 - Configurable target language (e.g. `zh-CN`, `ja-JP`).
@@ -13,7 +13,7 @@ A Cargo plugin that intercepts `cargo check` output, translates diagnostic messa
 
 ---
 
-##** Installation**
+## Installation
 
 1. Clone the repository:
 
@@ -47,7 +47,7 @@ A Cargo plugin that intercepts `cargo check` output, translates diagnostic messa
 
 ---
 
-##** Usage**
+## Usage
 
 ### 🔧 Local Development and Testing (for contributors)
 
@@ -93,7 +93,7 @@ Both forms are equivalent as long as the binary is in your PATH.
 
 ---
 
-**## Contributing**
+## Contributing
 
 Pull requests, issues, and suggestions are welcome!
 
