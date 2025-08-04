@@ -39,11 +39,16 @@ A Cargo plugin that intercepts `cargo check` output, translates diagnostic messa
    temperature = 0.2
    ```
 
-4. (Optional) Add `$HOME/.cargo/bin` to your system `PATH` so you can run installed tools globally:
+4. Add `/.cargo/bin` to your system `PATH` so you can run installed tools globally:
 
-   ```bash
+   ```for Linux or macOS (bash / zsh)
    export PATH="$HOME/.cargo/bin:$PATH"
+   source ~/.bashrc   # or ~/.zshrc
    ```
+   ```for Windows Powershell  
+   [Environment]::SetEnvironmentVariable("Path","$env:USERPROFILE\.cargo\bin;" + [Environment]::GetEnvironmentVariable("Path", "User"),"User")
+   ```
+   After making the changes, close and reopen your PowerShell terminal for them to take effect.
 
 ---
 

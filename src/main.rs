@@ -15,7 +15,7 @@ use strip_ansi_escapes::strip;
 use reqwest::blocking::Client;
 use serde_json::Value;
 
-/// 配置结构体
+/// Configuration struct
 #[derive(Deserialize, Serialize, Debug, Clone)]
 struct Config {
     version: Option<String>,
@@ -28,14 +28,14 @@ struct Config {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 配置路径
+    // Configuration path
     let config_path = config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("cargo-check-i18n")
         .join("config.toml");
     fs::create_dir_all(config_path.parent().unwrap())?;
 
-    // 加载或初始化配置
+    // Load or initialize configuration
     let cfg: Config = if config_path.exists() {
         let s = fs::read_to_string(&config_path)?;
         toml::from_str(&s)?
@@ -49,24 +49,24 @@ temperature = 0.2
 "#;
         fs::write(&config_path, example)?;
         eprintln!(
-            "已创建示例配置 {}，请填写 api_key 后重试。",
+            "Example configuration {} has been created. Please fill in the api_key and try again.",
             config_path.display()
         );
         return Ok(());
     };
 
-    // 校验 API Key
+    // Validate API key
     let _api_key = cfg.api_key.clone().filter(|k| !k.is_empty()).unwrap_or_else(|| {
-        eprintln!("请在 config.toml 中填写 api_key");
+        eprintln!("Please provide the api_key in config.toml");
         std::process::exit(1);
     });
 
-    // 缓存
+    // Cache
     let project_path = env::args().nth(1).unwrap_or_else(|| ".".into());
     let cache_path = PathBuf::from(&project_path).join(".cargo-check-i18n-cache.json");
     let cache = Arc::new(Mutex::new(load_cache(&cache_path)));
 
-    // 执行 cargo check
+    // Run cargo check
     let mut child = Command::new("cargo")
         .args(&["check", "--color=always"])
         .current_dir(&project_path)
@@ -113,15 +113,14 @@ fn process_line(
     let clean = String::from_utf8_lossy(&strip(raw.as_bytes())).to_string();
     if should_translate(&clean) {
         let key = clean.trim().to_string();
-        // 插入或获取翻译，强制使用 language
+        // Insert or retrieve translation, enforcing the use of 'language'
         let zh = {
             let mut store = cache.lock().unwrap();
             let result = store.entry(key.clone()).or_insert_with(|| {
                 let cfg = get_config();
                 let language = cfg.language.clone().unwrap_or_else(|| "zh-CN".into());
-                // 构造 prompt，并忽略 default_prompt
-                let prompt = format!("作为纯文本翻译器，将以下英文翻译为{}：{}", language, key);
-                let res = query_openai(&prompt, &cfg).unwrap_or_else(|| "翻译失败".into());
+                let prompt = format!("As a plain text translator, translate the following English into{}：{}", language, key);
+                let res = query_openai(&prompt, &cfg).unwrap_or_else(|| "Translation failed.".into());
                 res.lines().map(str::trim_end).collect::<Vec<_>>().join(" ")
             }).clone();
             let _ = save_cache(cache_path, &*store);
@@ -190,7 +189,7 @@ fn query_openai(prompt: &str, cfg: &Config) -> Option<String> {
         .send()
         .ok()?;
     if !resp.status().is_success() {
-        eprintln!("API 请求失败: {}", resp.status());
+        eprintln!("API request failed: {}", resp.status());
         return None;
     }
     let v: Value = serde_json::from_str(&resp.text().ok()?).ok()?;
