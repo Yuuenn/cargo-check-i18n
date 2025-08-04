@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    env,
     fs,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
@@ -14,6 +13,22 @@ use serde::{Deserialize, Serialize};
 use strip_ansi_escapes::strip;
 use reqwest::blocking::Client;
 use serde_json::Value;
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Run `cargo check` with i18n output in the current project
+    Check {
+        /// Path to the cargo project (default: ".")
+        path: Option<PathBuf>,
+    },
+}
 
 /// Configuration struct
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -29,6 +44,14 @@ struct Config {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
+
+    // 默认子命令为空时相当于 `check .`
+    let project_path = match &cli.command {
+        Some(Commands::Check { path }) => path.clone().unwrap_or_else(|| ".".into()),
+        None => PathBuf::from("."),
+    };
+
     // Configuration path
     let config_path = config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
@@ -74,8 +97,7 @@ response_path = "choices.0.message.content"
     });
 
     // Cache
-    let project_path = env::args().nth(1).unwrap_or_else(|| ".".into());
-    let cache_path = PathBuf::from(&project_path).join(".cargo-check-i18n-cache.json");
+    let cache_path = project_path.join(".cargo-check-i18n-cache.json");
     let cache = Arc::new(Mutex::new(load_cache(&cache_path)));
 
     // Run cargo check
