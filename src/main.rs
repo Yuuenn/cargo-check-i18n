@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{Arc, Mutex},
@@ -91,7 +91,7 @@ impl RateLimiter {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    // 默认子命令为空时相当于 `check .`
+    // Default subcommand is equivalent to `check .`
     let project_path = match cli.command {
         Commands::I18n { command } => match command {
             I18nSubCommands::Check { path } => path.unwrap_or_else(|| ".".into()),
@@ -147,7 +147,7 @@ response_path = "choices.0.message.content"
     let cache_path = project_path.join(".cargo-check-i18n-cache.json");
     let cache = Arc::new(Mutex::new(load_cache(&cache_path)));
 
-    // 读取 rate_limit，默认8，最小1
+    // Read rate_limit, default is 8, minimum is 1
     let rate_limit = cfg.rate_limit.unwrap_or(8).max(1);
     let limiter = Arc::new(RateLimiter::new(rate_limit));
 
@@ -177,7 +177,7 @@ response_path = "choices.0.message.content"
     Ok(())
 }
 
-// 修改 spawn_reader 增加 limiter 参数
+// Modify spawn_reader to add limiter parameter
 fn spawn_reader(
     stream: impl std::io::Read + Send + 'static,
     cache: Arc<Mutex<HashMap<String, String>>>,
@@ -192,7 +192,7 @@ fn spawn_reader(
     })
 }
 
-// 修改 process_line 增加 limiter 参数
+// Modify process_line to add limiter parameter
 fn process_line(
     raw: &str,
     cache: &Arc<Mutex<HashMap<String, String>>>,
@@ -209,9 +209,9 @@ fn process_line(
             } else {
                 let cfg = get_config();
                 let language = cfg.language.clone().unwrap_or_else(|| "zh-CN".into());
-                // 优化 prompt，去除多余空格和特殊字符
+                // Optimize the prompt by removing unnecessary spaces and special characters
                 let prompt = format!(
-                    "Translate the following English compiler diagnostic message into {} as plain text: {}",
+                    "Translate the following English Rust compiler diagnostic message into {} as plain text:: {}.",
                     language,
                     key.replace('\n', " ").replace("```", "").trim()
                 );
@@ -219,7 +219,7 @@ fn process_line(
                 let res = query_llm(&prompt, &cfg);
                 match res {
                     Some(ref v) if v != "Translation failed." => {
-                        let trimmed = v.trim_end().to_string(); // 去除末尾的换行符
+                        let trimmed = v.trim_end().to_string(); // Remove trailing newline
                         store.insert(key.clone(), trimmed.clone());
                         let _ = save_cache(cache_path, &*store);
                         trimmed
@@ -229,7 +229,7 @@ fn process_line(
                 }
             }
         };
-        println!("{} ({})", raw, zh); // 原文后直接加括号译文
+        println!("{} ({})", raw, zh); // Append translation in parentheses after the original text
     } else {
         println!("{}", raw);
     }
@@ -273,13 +273,29 @@ fn get_config() -> Config {
     toml::from_str(&s).unwrap()
 }
 
+fn log_debug_request(prompt: &str, body: &str) {
+    // Debug logging function to save request details for troubleshooting
+    let log_path = Path::new("debug_requests.log");
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_path)
+        .unwrap_or_else(|_| panic!("Failed to open or create debug log file: {:?}", log_path));
+    let log_entry = format!(
+        "=== DEBUG REQUEST ===\nPrompt:\n{}\nRequest Body:\n{}\n\n",
+        prompt, body
+    );
+    file.write_all(log_entry.as_bytes())
+        .expect("Failed to write to debug log file");
+}
+
 fn query_llm(prompt: &str, cfg: &Config) -> Option<String> {
     let url = cfg.api_url.clone()?;
     let api_key = cfg.api_key.clone();
     let model = cfg.model.clone().unwrap_or_else(|| "".into());
     let temp = cfg.temperature.unwrap_or(0.2);
 
-    // 构造请求体
+    // Construct the request body
     let body = if let Some(tpl) = &cfg.request_body_template {
         tpl.replace("{{model}}", &model)
             .replace("{{prompt}}", prompt)
@@ -291,6 +307,8 @@ fn query_llm(prompt: &str, cfg: &Config) -> Option<String> {
             "temperature": temp
         }).to_string()
     };
+
+    // log_debug_request(prompt, &body); // Debug logging is currently disabled
 
     let client = Client::new();
     let mut req = client.post(&url)
@@ -308,7 +326,7 @@ fn query_llm(prompt: &str, cfg: &Config) -> Option<String> {
     }
     let v: Value = serde_json::from_str(&resp.text().ok()?).ok()?;
 
-    // 解析响应
+    // Parse the response
     let path = cfg.response_path.as_deref().unwrap_or("choices.0.message.content");
     extract_json_path(&v, path)
 }
