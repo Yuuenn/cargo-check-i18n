@@ -6,6 +6,8 @@ use std::{
     process::{Command, Stdio},
     sync::{Arc, Mutex},
     thread,
+    time::{Duration, Instant},
+    thread::sleep,
 };
 
 use dirs::config_dir;
@@ -54,10 +56,36 @@ struct Config {
     language: Option<String>,
     api_url: Option<String>,
     api_key: Option<String>,
+    rate_limit: Option<u32>,
     model: Option<String>,
     temperature: Option<f32>,
     request_body_template: Option<String>,
     response_path: Option<String>,
+}
+
+struct RateLimiter {
+    interval: Duration,
+    last: Mutex<Instant>,
+}
+
+impl RateLimiter {
+    fn new(max_per_sec: u32) -> Self {
+        let safe_max = if max_per_sec < 1 { 1 } else { max_per_sec };
+        let interval = Duration::from_secs_f64(1.0 / safe_max as f64);
+        Self {
+            interval,
+            last: Mutex::new(Instant::now() - interval),
+        }
+    }
+    fn wait(&self) {
+        let mut last = self.last.lock().unwrap();
+        let now = Instant::now();
+        let elapsed = now.duration_since(*last);
+        if elapsed < self.interval {
+            sleep(self.interval - elapsed);
+        }
+        *last = Instant::now();
+    }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -86,6 +114,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 language = "zh-CN"
 api_url = "https://api.openai.com/v1/chat/completions"
 api_key = ""
+rate_limit = 8
 model = "gpt-4o-mini"
 temperature = 0.2
 
@@ -118,6 +147,10 @@ response_path = "choices.0.message.content"
     let cache_path = project_path.join(".cargo-check-i18n-cache.json");
     let cache = Arc::new(Mutex::new(load_cache(&cache_path)));
 
+    // 读取 rate_limit，默认8，最小1
+    let rate_limit = cfg.rate_limit.unwrap_or(8).max(1);
+    let limiter = Arc::new(RateLimiter::new(rate_limit));
+
     // Run cargo check
     let mut child = Command::new("cargo")
         .args(&["check", "--color=always"])
@@ -130,8 +163,8 @@ response_path = "choices.0.message.content"
     let stderr = child.stderr.take().unwrap();
 
     let handles = vec![
-        spawn_reader(stdout, Arc::clone(&cache), cache_path.clone()),
-        spawn_reader(stderr, Arc::clone(&cache), cache_path.clone()),
+        spawn_reader(stdout, Arc::clone(&cache), cache_path.clone(), Arc::clone(&limiter)),
+        spawn_reader(stderr, Arc::clone(&cache), cache_path.clone(), Arc::clone(&limiter)),
     ];
     for h in handles {
         h.join().unwrap();
@@ -144,41 +177,59 @@ response_path = "choices.0.message.content"
     Ok(())
 }
 
+// 修改 spawn_reader 增加 limiter 参数
 fn spawn_reader(
     stream: impl std::io::Read + Send + 'static,
     cache: Arc<Mutex<HashMap<String, String>>>,
     cache_path: PathBuf,
+    limiter: Arc<RateLimiter>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
         let reader = BufReader::new(stream).lines();
         for line in reader.flatten() {
-            process_line(&line, &cache, &cache_path);
+            process_line(&line, &cache, &cache_path, &limiter);
         }
     })
 }
 
+// 修改 process_line 增加 limiter 参数
 fn process_line(
     raw: &str,
     cache: &Arc<Mutex<HashMap<String, String>>>,
     cache_path: &Path,
+    limiter: &RateLimiter,
 ) {
     let clean = String::from_utf8_lossy(&strip(raw.as_bytes())).to_string();
     if should_translate(&clean) {
         let key = clean.trim().to_string();
-        // Insert or retrieve translation, enforcing the use of 'language'
         let zh = {
             let mut store = cache.lock().unwrap();
-            let result = store.entry(key.clone()).or_insert_with(|| {
+            if let Some(val) = store.get(&key) {
+                val.clone()
+            } else {
                 let cfg = get_config();
                 let language = cfg.language.clone().unwrap_or_else(|| "zh-CN".into());
-                let prompt = format!("As a plain text translator, translate the following English into {}: {}", language, key);
-                let res = query_llm(&prompt, &cfg).unwrap_or_else(|| "Translation failed.".into());
-                res.lines().map(str::trim_end).collect::<Vec<_>>().join(" ")
-            }).clone();
-            let _ = save_cache(cache_path, &*store);
-            result
+                // 优化 prompt，去除多余空格和特殊字符
+                let prompt = format!(
+                    "Translate the following English compiler diagnostic message into {} as plain text: {}",
+                    language,
+                    key.replace('\n', " ").replace("```", "").trim()
+                );
+                limiter.wait();
+                let res = query_llm(&prompt, &cfg);
+                match res {
+                    Some(ref v) if v != "Translation failed." => {
+                        let trimmed = v.trim_end().to_string(); // 去除末尾的换行符
+                        store.insert(key.clone(), trimmed.clone());
+                        let _ = save_cache(cache_path, &*store);
+                        trimmed
+                    }
+                    Some(v) => v.trim_end().to_string(),
+                    None => "Translation failed.".to_string(),
+                }
+            }
         };
-        println!("{} ({})", raw, zh);
+        println!("{} ({})", raw, zh); // 原文后直接加括号译文
     } else {
         println!("{}", raw);
     }

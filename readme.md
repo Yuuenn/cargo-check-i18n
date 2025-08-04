@@ -32,6 +32,7 @@ A Cargo plugin that intercepts `cargo check` output, translates diagnostic messa
    Configuration Instructions:
 
    3.1. Open ~/.config/cargo-check-i18n/config.toml (a sample will be generated automatically upon first run).
+
    3.2. Fill in your API information, for example:
 
    ```toml
@@ -39,6 +40,7 @@ A Cargo plugin that intercepts `cargo check` output, translates diagnostic messa
    language = "zh-CN"
    api_url = "https://api.openai.com/v1/chat/completions"         # LLM API endpoint
    api_key = "sk-xxxx"                                            # API key
+   rate_limit = 8
    model = "gpt-4o-mini"                                          # Model name
    temperature = 0.2                                              # Temperature parameter
 
@@ -59,15 +61,16 @@ A Cargo plugin that intercepts `cargo check` output, translates diagnostic messa
    3.4. After saving the configuration, run `cargo-check-i18n` to automatically call the specified API and display the translation result.
 
 4. Add `/.cargo/bin` to your system `PATH` so you can run installed tools globally:
-
-   ```for Linux or macOS (bash / zsh)
+   for Linux or macOS (bash / zsh)
+   ```
    export PATH="$HOME/.cargo/bin:$PATH"
    source ~/.bashrc   # or ~/.zshrc
    ```
-   ```for Windows Powershell  
+   for Windows Powershell
+   ```  
    [Environment]::SetEnvironmentVariable("Path","$env:USERPROFILE\.cargo\bin;" + [Environment]::GetEnvironmentVariable("Path", "User"),"User")
+   Start-Process powershell -ArgumentList '-NoExit' -Wait
    ```
-   After making the changes, close and reopen your PowerShell terminal for them to take effect.
 
 ---
 
