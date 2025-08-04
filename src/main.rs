@@ -131,7 +131,7 @@ fn process_line(
             let result = store.entry(key.clone()).or_insert_with(|| {
                 let cfg = get_config();
                 let language = cfg.language.clone().unwrap_or_else(|| "zh-CN".into());
-                let prompt = format!("As a plain text translator, translate the following English into{}：{}", language, key);
+                let prompt = format!("As a plain text translator, translate the following English into {}: {}", language, key);
                 let res = query_llm(&prompt, &cfg).unwrap_or_else(|| "Translation failed.".into());
                 res.lines().map(str::trim_end).collect::<Vec<_>>().join(" ")
             }).clone();

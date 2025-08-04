@@ -1,5 +1,0 @@
-{
-  "= note: `#[warn(unused_mut)]` on by default": "デフォルトで`#[warn(unused_mut)]`を有効にする",
-  "warning: variable does not need to be mutable": "警告: 変数は変更可能である必要はありません",
-  "warning: `cargo-zh` (bin \"cargo-zh\") generated 1 warning (run `cargo fix --bin \"cargo-zh\"` to apply 1 suggestion)": "警告: `cargo-zh` (バイナリ \"cargo-zh\") が警告を1件生成しました (1件の提案を適用するには、`cargo fix --bin \"cargo-zh\"` を実行してください)"
-}
