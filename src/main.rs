@@ -16,13 +16,30 @@ use serde_json::Value;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
+#[command(name = "cargo-i18n")]
+#[command(bin_name = "cargo")]
 struct Cli {
     #[command(subcommand)]
-    command: Option<Commands>,
+    command: Commands,
 }
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Internationalization commands for Cargo
+    I18n {
+        #[command(subcommand)]
+        command: I18nSubCommands,
+    },
+}
+
+#[derive(Parser)]
+struct I18nCommands {
+    #[command(subcommand)]
+    command: I18nSubCommands,
+}
+
+#[derive(Subcommand)]
+enum I18nSubCommands {
     /// Run `cargo check` with i18n output in the current project
     Check {
         /// Path to the cargo project (default: ".")
@@ -47,9 +64,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     // 默认子命令为空时相当于 `check .`
-    let project_path = match &cli.command {
-        Some(Commands::Check { path }) => path.clone().unwrap_or_else(|| ".".into()),
-        None => PathBuf::from("."),
+    let project_path = match cli.command {
+        Commands::I18n { command } => match command {
+            I18nSubCommands::Check { path } => path.unwrap_or_else(|| ".".into()),
+        },
     };
 
     // Configuration path
