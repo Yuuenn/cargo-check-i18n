@@ -24,7 +24,8 @@ struct Config {
     api_key: Option<String>,
     model: Option<String>,
     temperature: Option<f32>,
-    default_prompt: Option<String>,
+    request_body_template: Option<String>,
+    response_path: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -46,6 +47,17 @@ api_url = "https://api.openai.com/v1/chat/completions"
 api_key = ""
 model = "gpt-4o-mini"
 temperature = 0.2
+
+# Request body template. Supports {{model}}, {{prompt}}, and {{temperature}} variables.
+request_body_template = """
+{
+    \"model\": \"{{model}}\",
+    \"messages\": [{\"role\": \"user\", \"content\": \"{{prompt}}\"}],
+    \"temperature\": {{temperature}}
+}
+"""
+# JSON path to the response, using dot notation, e.g., choices.0.message.content
+response_path = "choices.0.message.content"
 "#;
         fs::write(&config_path, example)?;
         eprintln!(
@@ -120,7 +132,7 @@ fn process_line(
                 let cfg = get_config();
                 let language = cfg.language.clone().unwrap_or_else(|| "zh-CN".into());
                 let prompt = format!("As a plain text translator, translate the following English into{}：{}", language, key);
-                let res = query_openai(&prompt, &cfg).unwrap_or_else(|| "Translation failed.".into());
+                let res = query_llm(&prompt, &cfg).unwrap_or_else(|| "Translation failed.".into());
                 res.lines().map(str::trim_end).collect::<Vec<_>>().join(" ")
             }).clone();
             let _ = save_cache(cache_path, &*store);
@@ -170,30 +182,56 @@ fn get_config() -> Config {
     toml::from_str(&s).unwrap()
 }
 
-fn query_openai(prompt: &str, cfg: &Config) -> Option<String> {
+fn query_llm(prompt: &str, cfg: &Config) -> Option<String> {
     let url = cfg.api_url.clone()?;
-    let model = cfg.model.clone().unwrap_or_else(|| "gpt-4o-mini".into());
+    let api_key = cfg.api_key.clone();
+    let model = cfg.model.clone().unwrap_or_else(|| "".into());
     let temp = cfg.temperature.unwrap_or(0.2);
-    let api_key = cfg.api_key.clone()?;
+
+    // 构造请求体
+    let mut body = if let Some(tpl) = &cfg.request_body_template {
+        tpl.replace("{{model}}", &model)
+            .replace("{{prompt}}", prompt)
+            .replace("{{temperature}}", &temp.to_string())
+    } else {
+        serde_json::json!({
+            "model": model,
+            "messages": [{ "role": "user", "content": prompt }],
+            "temperature": temp
+        }).to_string()
+    };
+
     let client = Client::new();
-    let body = serde_json::json!({
-        "model": model,
-        "messages": [{ "role": "user", "content": prompt }],
-        "temperature": temp
-    });
-    let resp = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", api_key))
+    let mut req = client.post(&url)
         .header("Content-Type", "application/json")
-        .body(body.to_string())
-        .send()
-        .ok()?;
+        .body(body);
+
+    if let Some(key) = api_key {
+        req = req.header("Authorization", format!("Bearer {}", key));
+    }
+
+    let resp = req.send().ok()?;
     if !resp.status().is_success() {
         eprintln!("API request failed: {}", resp.status());
         return None;
     }
     let v: Value = serde_json::from_str(&resp.text().ok()?).ok()?;
-    v["choices"][0]["message"]["content"].as_str().map(str::to_string)
+
+    // 解析响应
+    let path = cfg.response_path.as_deref().unwrap_or("choices.0.message.content");
+    extract_json_path(&v, path)
+}
+
+fn extract_json_path(v: &Value, path: &str) -> Option<String> {
+    let mut cur = v;
+    for seg in path.split('.') {
+        if let Some(idx) = seg.parse::<usize>().ok() {
+            cur = cur.get(idx)?;
+        } else {
+            cur = cur.get(seg)?;
+        }
+    }
+    cur.as_str().map(str::to_string)
 }
 
 fn load_cache(path: &Path) -> HashMap<String, String> {
