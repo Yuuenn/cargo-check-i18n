@@ -189,7 +189,7 @@ fn query_llm(prompt: &str, cfg: &Config) -> Option<String> {
     let temp = cfg.temperature.unwrap_or(0.2);
 
     // 构造请求体
-    let mut body = if let Some(tpl) = &cfg.request_body_template {
+    let body = if let Some(tpl) = &cfg.request_body_template {
         tpl.replace("{{model}}", &model)
             .replace("{{prompt}}", prompt)
             .replace("{{temperature}}", &temp.to_string())
